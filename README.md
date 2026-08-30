@@ -49,7 +49,7 @@ codex login status
 
 #### 让你的 Agent 帮你安装（推荐）
 
-复制下面这句话，发送给 Claude Code、QoderCN、Kimi Code 或其他支持 Agent Skills 的编程 Agent：
+复制下面这句话，发送给你正在使用、且支持 Agent Skills 的编程 Agent（例如 Claude Code、QoderCN 或 Kimi Code）：
 
 ```text
 帮我安装这个 skill：https://github.com/Niall-Young/GenerateIMG-with-codex
@@ -183,7 +183,7 @@ codex login status
 
 #### Ask your Agent to install it (recommended)
 
-Copy the prompt below and send it to Claude Code, QoderCN, Kimi Code, or another coding Agent that supports Agent Skills:
+Copy the prompt below and send it to the Agent Skills-compatible coding Agent you use (for example, Claude Code, QoderCN, or Kimi Code):
 
 ```text
 Install this skill for me: https://github.com/Niall-Young/GenerateIMG-with-codex

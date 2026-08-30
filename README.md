@@ -47,7 +47,21 @@ codex --version
 codex login status
 ```
 
-#### 使用 SkillManager 安装
+#### 让你的 Agent 帮你安装（推荐）
+
+复制下面这句话，发送给 Claude Code、QoderCN、Kimi Code 或其他支持 Agent Skills 的编程 Agent：
+
+```text
+帮我安装这个 skill：https://github.com/Niall-Young/GenerateIMG-with-codex
+```
+
+Agent 应将仓库完整安装到它自己的标准用户级 Skills 目录，并保留 `SKILL.md`、`scripts/` 和 `references/`。安装完成后，可让它执行一次 `--dry-run` 来确认 Skill 已被发现且桥接命令可用。
+
+> 本 Skill 是给非 Codex Agent 调用本机 Codex 生图能力的桥梁。Codex 自身已内置 System `imagegen`，无需安装本 Skill。
+
+#### 使用 SkillManager 安装（可选）
+
+如果你已经在使用 SkillManager，也可以用以下命令同时管理多个 Agent 的安装：
 
 ```sh
 skillmgr source add https://github.com/Niall-Young/GenerateIMG-with-codex.git \
@@ -167,7 +181,21 @@ codex --version
 codex login status
 ```
 
-#### Install with SkillManager
+#### Ask your Agent to install it (recommended)
+
+Copy the prompt below and send it to Claude Code, QoderCN, Kimi Code, or another coding Agent that supports Agent Skills:
+
+```text
+Install this skill for me: https://github.com/Niall-Young/GenerateIMG-with-codex
+```
+
+The Agent should install the complete repository into its standard user-level Skills directory, preserving `SKILL.md`, `scripts/`, and `references/`. After installation, ask it to run a `--dry-run` to confirm that the Skill is discoverable and the bridge command works.
+
+> This Skill lets non-Codex Agents call the local Codex image-generation capability. Codex already includes the System `imagegen` Skill and does not need this bridge installed.
+
+#### Install with SkillManager (optional)
+
+If you already use SkillManager, you can manage installation across multiple Agents with these commands:
 
 ```sh
 skillmgr source add https://github.com/Niall-Young/GenerateIMG-with-codex.git \

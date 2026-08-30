@@ -1,6 +1,6 @@
 # openai-imagegen
 
-让 Claude Code、QoderCN 和 Kimi Code 通过同一 Agent Skill 调用官方 OpenAI GPT Image 2 API。A shared Agent Skill that lets Claude Code, QoderCN, and Kimi Code use the official OpenAI GPT Image 2 API.
+让 Claude Code、QoderCN 和 Kimi Code 复用本机 Codex 登录及其内置 Imagegen 能力。A shared Agent Skill that lets Claude Code, QoderCN, and Kimi Code reuse the local Codex login and built-in Imagegen capability.
 
 [中文](#中文) | [English](#english)
 
@@ -11,34 +11,41 @@
 
 ### 项目简介
 
-`openai-imagegen` 是一份可移植的 Agent Skill，为没有内置 OpenAI 生图工具的代码 Agent 提供文生图、多图编辑和 JSONL 批量生成能力。它调用官方 `gpt-image-2` API，并由本地 SkillManager 按 Agent 白名单分发。
+`openai-imagegen` 是一座跨 Agent 桥梁。Claude Code、QoderCN 或 Kimi Code 加载这个 Skill 后，会启动本机 `codex exec`，由 Codex 的 System `$imagegen` Skill 调用内置 `image_gen` 工具并把图片保存回当前项目。
 
-Codex 已有 System-owned `imagegen`，因此本项目的默认白名单只包含 Claude Code、QoderCN 和 Kimi Code，不覆盖 Codex 内置能力。
+```text
+Claude / QoderCN / Kimi
+          ↓
+   openai-imagegen Skill
+          ↓
+       codex exec
+          ↓
+Codex System $imagegen → built-in image_gen
+```
+
+它使用当前 Codex 登录及其额度，不调用 OpenAI Images API，不需要也不会读取 `OPENAI_API_KEY`。Codex 自身不安装本 Skill，继续使用原生 System `imagegen`。
 
 ### 核心能力
 
-- 使用官方 `gpt-image-2` 完成生成和编辑。
-- 支持同提示词多变体，以及不同提示词的并发 JSONL 批量任务。
-- 输出前检查目标文件，默认不覆盖；批量失败会保留成功结果并返回结构化摘要。
-- 只从 `OPENAI_API_KEY` 读取认证，不支持中转 Base URL 或模型降级。
-- 使用 Agent Skills 标准的 `SKILL.md + scripts/ + references/` 结构。
+- 让非 Codex Agent 通过本机 Codex 登录完成真实生图。
+- 支持新图生成、参考图生成、多图编辑和 JSONL 批量任务。
+- 每次任务启动独立、临时的 `codex exec` 会话，并显式要求调用 System `$imagegen`。
+- 将结果保存到调用方项目的精确路径，并验证 PNG、JPEG 或 WebP 文件签名。
+- 默认拒绝覆盖现有图片；完全不接触 API Key、OpenAI SDK 或中转 API。
 
 ### 快速开始
 
 #### 环境要求
 
 - macOS 或 Linux
-- [`uv`](https://docs.astral.sh/uv/) 0.10 或更高版本
-- 可访问 OpenAI API 的网络
-- 拥有 GPT Image API 权限的 `OPENAI_API_KEY`
-
-#### 配置密钥
+- Python 3.9 或更高版本
+- 已安装 Codex CLI
+- `codex login status` 显示已通过 ChatGPT 登录
 
 ```sh
-export OPENAI_API_KEY="your_api_key_here"
+codex --version
+codex login status
 ```
-
-密钥只应存在于进程环境中。不要把真实密钥写入仓库、提示词或命令参数。
 
 #### 使用 SkillManager 安装
 
@@ -52,64 +59,64 @@ skillmgr plan
 skillmgr sync --apply
 ```
 
-执行 `sync --apply` 前检查 `plan`，确认没有意外删除或冲突。若 `skillmgr` 不在 PATH，可在 SkillManager 项目中用 `node dist/cli.js` 替代。
+Codex 不在白名单内。执行同步前应确认 `plan` 只为目标 Agent 创建入口且没有冲突。
 
 ### 使用方法
 
-安装后，可以让 Agent 自动选择 Skill，也可以显式调用：
+安装后，在目标 Agent 中直接要求生图即可，也可以显式调用：
 
-- Claude Code：`/openai-imagegen`
-- QoderCN：`/openai-imagegen`
-- Kimi Code：`/skill:openai-imagegen`
+- Claude Code：`/openai-imagegen 生成一张……`
+- QoderCN：`/openai-imagegen 生成一张……`
+- Kimi Code：`/skill:openai-imagegen 生成一张……`
 
-直接运行 CLI：
+Skill 最终运行的桥接命令示例：
 
 ```sh
-uv run --script scripts/openai_imagegen.py generate \
-  --prompt "A quiet editorial photograph of a ceramic cup at dawn" \
-  --size 1024x1024 \
-  --quality low \
-  --out output/imagegen/cup.png
+python3 scripts/codex_imagegen.py generate \
+  --prompt "一只橘猫坐在未来城市屋顶，电影感夜景，16:9" \
+  --out output/imagegen/cat.png
 ```
 
-编辑图片：
+编辑已有图片：
 
 ```sh
-uv run --script scripts/openai_imagegen.py edit \
+python3 scripts/codex_imagegen.py edit \
   --image input/product.png \
-  --prompt "Replace only the background; keep the product unchanged" \
+  --prompt "只把背景改成暖灰色，产品、标签和构图保持不变" \
   --out output/imagegen/product-edited.png
 ```
 
-完整参数和 JSONL 批量格式见 [`references/cli.md`](references/cli.md)。
+完整命令和 JSONL 格式见 [`references/cli.md`](references/cli.md)。
 
-### 配置
+### 配置与安全
 
-模型固定为 `gpt-image-2`。默认尺寸为 `auto`、质量为 `medium`、格式为 PNG。CLI 不提供 `--model`、`--base-url` 或自动透明背景降级。
+- 认证只来自 Codex 自己保存的登录状态。
+- 不要设置或传递 `OPENAI_API_KEY` 给本 Skill。
+- 输出必须位于 `--workspace` 内，默认 workspace 是当前目录。
+- `--force` 只有在用户明确要求替换现有图片时才能使用。
+- 每次真实生成都会消耗 Codex 登录账户可用额度；`--dry-run` 不生图。
 
 ### 项目结构
 
 ```text
 SKILL.md                    Agent Skill 入口
-scripts/openai_imagegen.py  官方 API CLI
-references/                 CLI 与提示词参考
-tests/                      离线单元测试
+scripts/codex_imagegen.py   Codex CLI 桥接器
+references/                 调用与提示词参考
+tests/                      离线桥接测试
 ```
 
 ### 开发与验证
 
 ```sh
-uv run --python 3.12 python -m unittest discover -s tests -v
-uv run --script scripts/openai_imagegen.py --help
-uv run --script scripts/openai_imagegen.py generate \
+python3 -m unittest discover -s tests -v
+python3 scripts/codex_imagegen.py --help
+python3 scripts/codex_imagegen.py generate \
   --prompt "test" \
-  --size 1024x1024 \
-  --quality low \
   --out output/imagegen/test.png \
   --dry-run
 ```
 
-`--dry-run` 不访问 API，也不会创建图片，不能替代真实端到端验收。
+真实端到端验证必须产生一张可打开的图片，仅有 dry-run 不算完成。
 
 ### 许可证
 
@@ -124,34 +131,41 @@ uv run --script scripts/openai_imagegen.py generate \
 
 ### Overview
 
-`openai-imagegen` is a portable Agent Skill that gives coding agents without a built-in OpenAI image tool text-to-image generation, multi-image editing, and JSONL batch generation. It calls the official `gpt-image-2` API and is distributed through a local SkillManager Agent allowlist.
+`openai-imagegen` is a cross-Agent bridge. After Claude Code, QoderCN, or Kimi Code loads the Skill, it starts local `codex exec`; Codex's System `$imagegen` Skill then calls the built-in `image_gen` tool and saves the image back into the current project.
 
-Codex already owns a System `imagegen` Skill, so this project's default allowlist contains only Claude Code, QoderCN, and Kimi Code and does not replace Codex's built-in capability.
+```text
+Claude / QoderCN / Kimi
+          ↓
+   openai-imagegen Skill
+          ↓
+       codex exec
+          ↓
+Codex System $imagegen → built-in image_gen
+```
+
+It uses the current Codex login and allowance. It does not call the OpenAI Images API and neither requires nor reads `OPENAI_API_KEY`. Codex itself does not receive this Skill and continues using its native System `imagegen`.
 
 ### Features
 
-- Generate and edit images with the official `gpt-image-2` model.
-- Create same-prompt variants or run concurrent JSONL jobs for distinct prompts.
-- Refuse overwrites by default; retain successful batch results and return a structured failure summary.
-- Read authentication only from `OPENAI_API_KEY`, with no relay Base URL or model downgrade.
-- Follow the Agent Skills `SKILL.md + scripts/ + references/` structure.
+- Let non-Codex Agents perform real image generation through the local Codex login.
+- Support new generation, reference-guided generation, multi-image editing, and JSONL batches.
+- Start an independent ephemeral `codex exec` session for each task and explicitly require System `$imagegen`.
+- Save results to an exact path in the caller's project and validate PNG, JPEG, or WebP signatures.
+- Refuse overwrites by default and never use an API key, OpenAI SDK, or relay API.
 
 ### Quick Start
 
 #### Prerequisites
 
 - macOS or Linux
-- [`uv`](https://docs.astral.sh/uv/) 0.10 or newer
-- Network access to the OpenAI API
-- An `OPENAI_API_KEY` with GPT Image API access
-
-#### Configure the key
+- Python 3.9 or newer
+- Codex CLI installed
+- `codex login status` reports a ChatGPT login
 
 ```sh
-export OPENAI_API_KEY="your_api_key_here"
+codex --version
+codex login status
 ```
-
-Keep the key only in the process environment. Never place a real key in the repository, prompt, or command arguments.
 
 #### Install with SkillManager
 
@@ -165,64 +179,64 @@ skillmgr plan
 skillmgr sync --apply
 ```
 
-Inspect `plan` for unexpected removals or conflicts before running `sync --apply`. If `skillmgr` is not on PATH, use `node dist/cli.js` from the SkillManager project instead.
+Codex is not in the allowlist. Before syncing, confirm that `plan` only creates entries for the target Agents and contains no conflicts.
 
 ### Usage
 
-After installation, let the Agent select the Skill automatically or invoke it explicitly:
+After installation, ask the target Agent to generate an image directly or invoke the Skill explicitly:
 
-- Claude Code: `/openai-imagegen`
-- QoderCN: `/openai-imagegen`
-- Kimi Code: `/skill:openai-imagegen`
+- Claude Code: `/openai-imagegen generate an image of ...`
+- QoderCN: `/openai-imagegen generate an image of ...`
+- Kimi Code: `/skill:openai-imagegen generate an image of ...`
 
-Run the CLI directly:
+Example bridge command ultimately run by the Skill:
 
 ```sh
-uv run --script scripts/openai_imagegen.py generate \
-  --prompt "A quiet editorial photograph of a ceramic cup at dawn" \
-  --size 1024x1024 \
-  --quality low \
-  --out output/imagegen/cup.png
+python3 scripts/codex_imagegen.py generate \
+  --prompt "An orange cat on a futuristic rooftop, cinematic night scene, 16:9" \
+  --out output/imagegen/cat.png
 ```
 
-Edit an image:
+Edit an existing image:
 
 ```sh
-uv run --script scripts/openai_imagegen.py edit \
+python3 scripts/codex_imagegen.py edit \
   --image input/product.png \
-  --prompt "Replace only the background; keep the product unchanged" \
+  --prompt "Change only the background to warm gray; preserve the product, label, and composition" \
   --out output/imagegen/product-edited.png
 ```
 
-See [`references/cli.md`](references/cli.md) for all options and the JSONL batch format.
+See [`references/cli.md`](references/cli.md) for complete commands and the JSONL format.
 
-### Configuration
+### Configuration and Security
 
-The model is fixed to `gpt-image-2`. Defaults are `size=auto`, `quality=medium`, and PNG output. The CLI intentionally has no `--model`, `--base-url`, or automatic transparent-background downgrade.
+- Authentication comes only from Codex's stored login state.
+- Do not set or pass `OPENAI_API_KEY` to this Skill.
+- Outputs must remain inside `--workspace`, which defaults to the current directory.
+- Use `--force` only when the user explicitly requests replacement of an existing image.
+- Every real generation consumes available Codex account allowance; `--dry-run` creates no image.
 
 ### Project Structure
 
 ```text
 SKILL.md                    Agent Skill entry point
-scripts/openai_imagegen.py  Official API CLI
-references/                 CLI and prompting references
-tests/                      Offline unit tests
+scripts/codex_imagegen.py   Codex CLI bridge
+references/                 Invocation and prompting references
+tests/                      Offline bridge tests
 ```
 
 ### Development and Verification
 
 ```sh
-uv run --python 3.12 python -m unittest discover -s tests -v
-uv run --script scripts/openai_imagegen.py --help
-uv run --script scripts/openai_imagegen.py generate \
+python3 -m unittest discover -s tests -v
+python3 scripts/codex_imagegen.py --help
+python3 scripts/codex_imagegen.py generate \
   --prompt "test" \
-  --size 1024x1024 \
-  --quality low \
   --out output/imagegen/test.png \
   --dry-run
 ```
 
-`--dry-run` makes no API call and creates no image, so it is not a substitute for live end-to-end validation.
+A real end-to-end check must produce a viewable image; a dry run alone is not completion.
 
 ### License
 
